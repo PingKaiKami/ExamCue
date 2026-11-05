@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "examcue"
+version = "0.1.0"
+description = "Local-first desktop app that extracts explicit and inferred exam cues from lectures."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "av>=11,<17",
+  "faster-whisper>=1.1,<2",
+  "yt-dlp>=2025.1",
+  "Pillow>=10,<13",
+  "pypdf>=5,<7",
+  "python-pptx>=1,<2",
+  "tkinterdnd2>=0.4.3,<1",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.9"]
+cuda-windows = [
+  "nvidia-cublas-cu12>=12.9; sys_platform == 'win32'",
+  "nvidia-cudnn-cu12>=9.27; sys_platform == 'win32'",
+]
+
+[project.scripts]
+examcue = "examcue.app:main"
+
+[tool.setuptools.packages.find]
+include = ["examcue*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+
