@@ -772,7 +772,7 @@ class ExamCueApp(AppTk):
         self.project_name_var = tk.StringVar(value="我的課程")
         self.output_dir_var = tk.StringVar(value=str(Path.cwd() / "projects" / "我的課程"))
         self.output_language_var = tk.StringVar(value="繁體中文")
-        self.whisper_model_var = tk.StringVar(value="small")
+        self.whisper_model_var = tk.StringVar(value="large-v3")
         self.transcription_source_var = tk.StringVar(value=next(iter(TRANSCRIPTION_SOURCE_OPTIONS)))
         self.transcription_mode_var = tk.StringVar(value=list(TRANSCRIPTION_MODE_OPTIONS)[1])
         self.use_llm_var = tk.BooleanVar(value=False)
@@ -928,6 +928,8 @@ class ExamCueApp(AppTk):
         ttk.Label(
             self.llm_details,
             text=(
+                "建議使用 27B 左右或更大的模型（例如 qwen/qwen3.8-27b）並關閉 Thinking；"
+                "9B 等小模型較常漏判、分錯類或寫錯標題。"
                 "外接 LLM 會收到逐字稿片段，可能產生 API 費用。API Key 僅保留於本次執行的記憶體中。"
             ),
             style="CardMuted.TLabel",

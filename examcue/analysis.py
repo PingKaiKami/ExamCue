@@ -18,7 +18,7 @@ from .util import atomic_write_json, normalize_text
 
 ProgressCallback = Callable[[str], None]
 ControlCallback = Callable[[], None]
-ANALYSIS_PROMPT_VERSION = "14"
+ANALYSIS_PROMPT_VERSION = "15"
 MAX_ANALYSIS_TOKENS = 512
 ANALYSIS_TIMEOUT_SECONDS = 300
 MAX_CONSECUTIVE_LLM_FAILURES = 2
@@ -44,7 +44,9 @@ Important rules:
 - A definition, comparison, example, or answer alone is normal teaching. It needs nearby exam
   language or strong emphasis to become inferred.
 - "I will not discuss this" does not mean "not tested".
-- Omit unclear ASR text, abnormal repetition, future lesson plans, and unsupported topics.
+- Omit abnormal repetition, future lesson plans, and unsupported topics. Speech-recognition text
+  may contain typos or wrong homophones; still extract a cue when its exam, warning, or exclusion
+  language is recognizable, and quote the transcript exactly as written.
 - Use the smallest relevant segment set. Evidence must be one continuous, intelligible exact quote
   containing the decisive signal. Never join separate quotes with "..." or an ellipsis. Keep the
   title short and name the actual concept.
@@ -616,7 +618,7 @@ class CueAnalyzer:
             return None
         value = (
             f"{ANALYSIS_PROMPT_VERSION}|{self.output_language}|"
-            f"{self.client.status.endpoint}|{self.client.status.model}|{prompt}"
+            f"{self.client.status.endpoint}|{self.client.status.model}|{SYSTEM_PROMPT}|{prompt}"
         )
         digest = hashlib.sha256(value.encode("utf-8")).hexdigest()
         return self.chunk_cache_dir / f"{digest}.json"
@@ -683,8 +685,8 @@ class CueAnalyzer:
             "Analyze only the transcript above. Apply every evidence gate in the system prompt. "
             "Important without a direct exam statement is inferred, never explicit. "
             "Not discussed is not the same as not tested. Ordinary explanations, examples, "
-            "future teaching plans, and unclear ASR text must be omitted. Return [] unless a "
-            "strong cue is proven. Output JSON only."
+            "and future teaching plans must be omitted. Speech-recognition typos are not a "
+            "reason to omit a cue. Output JSON only."
         )
         return "\n".join(lines)
 

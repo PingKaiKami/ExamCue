@@ -264,6 +264,20 @@ class HeuristicAnalysisTests(unittest.TestCase):
         self.assertEqual(len(second), 1)
         analyzer.client.analyze.assert_called_once()
 
+    def test_chunk_cache_is_invalidated_when_system_prompt_changes(self):
+        with tempfile.TemporaryDirectory(dir=Path.cwd()) as directory:
+            analyzer = CueAnalyzer(
+                endpoint="http://localhost:1234/v1",
+                model="test-model",
+                chunk_cache_dir=Path(directory),
+            )
+            analyzer.client.status = LLMStatus(analyzer.client.requested_endpoint, "test-model")
+            before = analyzer._chunk_cache_path("prompt")
+            with patch("examcue.analysis.SYSTEM_PROMPT", "changed system prompt"):
+                after = analyzer._chunk_cache_path("prompt")
+
+        self.assertNotEqual(before, after)
+
     def test_empty_direct_signal_response_is_retried_instead_of_cached(self):
         segments = [TranscriptSegment(0, 10, "這個定義考試會考")]
         with tempfile.TemporaryDirectory(dir=Path.cwd()) as directory:

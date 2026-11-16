@@ -42,7 +42,7 @@ class PipelineConfig:
     project_dir: Path
     sources: list[str]
     output_language: str = "繁體中文"
-    whisper_model: str = "small"
+    whisper_model: str = "large-v3"
     transcription_source: str = "auto"
     transcription_mode: str = "standard"
     analysis_chunk_seconds: int = 120
@@ -250,6 +250,7 @@ class ExamCuePipeline:
                 wait=True,
                 cancel_futures=not completed_normally,
             )
+            transcriber.release()
 
         self._metrics["phase_seconds"]["media_and_transcription_wall"] = round(
             time.perf_counter() - media_transcription_started, 3

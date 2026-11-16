@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ctypes
+import gc
 import hashlib
 import importlib.util
 import json
@@ -27,6 +28,11 @@ TRANSCRIPTION_PROFILES = {
     "standard": {"beam_size": 3, "batch_size": 4},
     "accurate": {"beam_size": 5, "batch_size": 1},
 }
+
+# Sets only the script and punctuation style; course terms belong in hotwords.
+ZH_INITIAL_PROMPT = "以下是繁體中文的課堂講解。"
+# Part of the transcript cache key so transcripts made before the prompt are redone.
+WHISPER_CACHE_TAG = "zh-prompt1"
 
 TRANSCRIPTION_METHOD_LABELS = {
     "manual_subtitle": "人工字幕",
@@ -267,10 +273,11 @@ class Transcriber:
         else:
             if self.hotwords:
                 hotword_key = hashlib.sha256(self.hotwords.encode("utf-8")).hexdigest()[:16]
-                expected_model = f"{self.model_name}:{self.mode}:hotwords={hotword_key}"
+                expected_model = (
+                    f"{self.model_name}:{self.mode}:{WHISPER_CACHE_TAG}:hotwords={hotword_key}"
+                )
             else:
-                # Preserve V1 cache compatibility when no reference glossary is used.
-                expected_model = f"{self.model_name}:{self.mode}"
+                expected_model = f"{self.model_name}:{self.mode}:{WHISPER_CACHE_TAG}"
             self.last_method = "whisper"
         cached = self.store.load(item, expected_model=expected_model)
         if cached is not None:
@@ -328,38 +335,51 @@ class Transcriber:
         }
         if self.hotwords:
             options["hotwords"] = self.hotwords
-        if batch_size > 1:
-            batched_model = self._get_batched_model(model)
+        use_batched = batch_size > 1
+
+        def run():
+            nonlocal use_batched
+            if use_batched:
+                batched_model = self._get_batched_model(model)
+                try:
+                    return batched_model.transcribe(
+                        str(audio_path), batch_size=batch_size, **options
+                    )
+                except TypeError as exc:
+                    if "hotwords" not in options:
+                        raise
+                    progress(f"目前語音引擎不支援教材術語提示，略過提示繼續：{exc}")
+                    options.pop("hotwords", None)
+                    return batched_model.transcribe(
+                        str(audio_path), batch_size=batch_size, **options
+                    )
+                except RuntimeError:
+                    progress("批次辨識無法執行，改用單批模式繼續")
+                    use_batched = False
+                    return model.transcribe(
+                        str(audio_path), condition_on_previous_text=True, **options
+                    )
             try:
-                generated, info = batched_model.transcribe(
-                    str(audio_path), batch_size=batch_size, **options
+                return model.transcribe(
+                    str(audio_path), condition_on_previous_text=True, **options
                 )
             except TypeError as exc:
                 if "hotwords" not in options:
                     raise
                 progress(f"目前語音引擎不支援教材術語提示，略過提示繼續：{exc}")
                 options.pop("hotwords", None)
-                generated, info = batched_model.transcribe(
-                    str(audio_path), batch_size=batch_size, **options
-                )
-            except RuntimeError:
-                progress("批次辨識無法執行，改用單批模式繼續")
-                generated, info = model.transcribe(
+                return model.transcribe(
                     str(audio_path), condition_on_previous_text=True, **options
                 )
-        else:
-            try:
-                generated, info = model.transcribe(
-                    str(audio_path), condition_on_previous_text=True, **options
-                )
-            except TypeError as exc:
-                if "hotwords" not in options:
-                    raise
-                progress(f"目前語音引擎不支援教材術語提示，略過提示繼續：{exc}")
-                options.pop("hotwords", None)
-                generated, info = model.transcribe(
-                    str(audio_path), condition_on_previous_text=True, **options
-                )
+
+        # faster-whisper detects the language before decoding lazily, so restarting
+        # here only repeats audio loading. Without a prompt Whisper mixes Simplified and
+        # Traditional script in Mandarin lectures and often omits punctuation.
+        generated, info = run()
+        if info.language == "zh":
+            options["language"] = "zh"
+            options["initial_prompt"] = ZH_INITIAL_PROMPT
+            generated, info = run()
         segments: list[TranscriptSegment] = []
         duration = max(float(getattr(info, "duration", 0) or 0), 0)
         last_reported_percent = -1
@@ -380,6 +400,12 @@ class Transcriber:
                     progress(f"語音辨識進度 {min(segment.end, duration):.2f}/{duration:.2f}")
                     last_reported_percent = percent
         return segments, str(info.language or "auto")
+
+    def release(self) -> None:
+        """Free the Whisper model so later LLM and vision work has the GPU memory."""
+        self._model = None
+        self._batched_model = None
+        gc.collect()
 
     def _get_batched_model(self, model):
         if self._batched_model is None:

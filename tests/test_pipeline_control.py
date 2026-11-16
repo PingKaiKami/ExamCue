@@ -100,6 +100,9 @@ class PipelineControlTests(unittest.TestCase):
                     allow_second_prepare_to_finish.set()
                 return [TranscriptSegment(0, 1, item.title)], "zh"
 
+            def release(self):
+                pass
+
         config = PipelineConfig(
             "overlap",
             root,

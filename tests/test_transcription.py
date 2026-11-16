@@ -7,6 +7,7 @@ from unittest.mock import ANY, Mock, patch
 
 from examcue.domain import MediaItem, TranscriptSegment
 from examcue.transcription import (
+    ZH_INITIAL_PROMPT,
     Transcriber,
     TranscriptStore,
     _is_cuda_runtime_error,
@@ -59,13 +60,48 @@ class SubtitleTests(unittest.TestCase):
         self.assertEqual(batched_model.transcribe.call_args.kwargs["batch_size"], 4)
         self.assertEqual(batched_model.transcribe.call_args.kwargs["beam_size"], 3)
 
+    def test_mandarin_is_retranscribed_with_traditional_prompt(self):
+        with tempfile.TemporaryDirectory(dir=Path.cwd()) as directory:
+            transcriber = Transcriber(TranscriptStore(Path(directory)), "small", mode="standard")
+            batched_model = Mock()
+            batched_model.transcribe.side_effect = [
+                ([], SimpleNamespace(language="zh", duration=5.0)),
+                (
+                    [SimpleNamespace(start=0.0, end=5.0, text="考試以講義為主。")],
+                    SimpleNamespace(language="zh", duration=5.0),
+                ),
+            ]
+            transcriber._get_model = Mock(return_value=Mock())
+            transcriber._get_batched_model = Mock(return_value=batched_model)
+
+            segments, language = transcriber._transcribe_audio(Path(directory) / "audio.webm")
+
+        self.assertEqual(language, "zh")
+        self.assertEqual([segment.text for segment in segments], ["考試以講義為主。"])
+        first, second = batched_model.transcribe.call_args_list
+        self.assertIsNone(first.kwargs["language"])
+        self.assertNotIn("initial_prompt", first.kwargs)
+        self.assertEqual(second.kwargs["language"], "zh")
+        self.assertEqual(second.kwargs["initial_prompt"], ZH_INITIAL_PROMPT)
+
+    def test_release_drops_loaded_models(self):
+        with tempfile.TemporaryDirectory(dir=Path.cwd()) as directory:
+            transcriber = Transcriber(TranscriptStore(Path(directory)), "small")
+            transcriber._model = Mock()
+            transcriber._batched_model = Mock()
+
+            transcriber.release()
+
+        self.assertIsNone(transcriber._model)
+        self.assertIsNone(transcriber._batched_model)
+
     def test_batch_failure_falls_back_to_single_inference(self):
         with tempfile.TemporaryDirectory(dir=Path.cwd()) as directory:
             transcriber = Transcriber(TranscriptStore(Path(directory)), "small", mode="fast")
             base_model = Mock()
             base_model.transcribe.return_value = (
                 [SimpleNamespace(start=0.0, end=5.0, text="fallback")],
-                SimpleNamespace(language="zh", duration=5.0),
+                SimpleNamespace(language="en", duration=5.0),
             )
             batched_model = Mock()
             batched_model.transcribe.side_effect = RuntimeError("out of memory")
