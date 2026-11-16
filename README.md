@@ -240,11 +240,11 @@ ExamCue，讓程式載入新增的 DLL。
 若要在不呼叫 LLM、也不產生 API 費用的情況下估算某個既有專案需要多少次請求，可執行：
 
 ```powershell
-.\.venv\Scripts\python.exe .\scripts\benchmark_analysis.py .\projects\test4
+.\.venv\Scripts\python.exe .\scripts\benchmark_analysis.py .\projects\<專案名稱>
 ```
 
 輸出會比較三種分段模式在「完整掃描」與「重點優先」下的預計呼叫次數、輸入字元數及
-減少比例。以目前 `test4` 的 6 份逐字稿為例，標準模式由 142 次完整掃描降為 20 次
+減少比例。以先前一個含 6 份逐字稿的測試專案為例，標準模式由 142 次完整掃描降為 20 次
 候選請求，呼叫數減少 85.9%，送入字元由 62,951 降為 9,535，減少 84.9%。這是離線
 估算，實際時間仍取決於模型與硬體。
 
@@ -287,7 +287,7 @@ ExamCue，讓程式載入新增的 DLL。
 
 ```powershell
 .\.venv\Scripts\python.exe .\scripts\benchmark_transcription.py `
-  .\projects\test4\media\youtube-mC3MOlqY1Tg\audio.wav `
+  .\projects\<專案名稱>\media\<來源 ID>\source.webm `
   --model small --seconds 180 --device cpu --compute-type int8 `
   --batch-size 8 --beam-size 1
 ```
